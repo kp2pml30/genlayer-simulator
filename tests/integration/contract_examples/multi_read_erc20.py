@@ -1,26 +1,32 @@
-from collections import defaultdict
-from backend.node.genvm.icontract import IContract
+# { "Depends": "genlayer-py-std:test" }
+
+import genlayer.std as gl
+from genlayer.py.types import *
+from genlayer.py.storage import *
 
 
 def default_dict_int():
     return defaultdict(int)
 
 
-class multi_read_erc20(IContract):
-    def __init__(self):
+@gl.contract
+class multi_read_erc20:
+    balances: TreeMap[Address, TreeMap[Address, u256]]
 
-        # address -> contract address -> balance
-        self.balances = defaultdict(
-            default_dict_int
-        )  # TODO: lambdas are not working yet. Once they work, we should `self.balances = defaultdict(lambda: defaultdict(int))`
-
+    @gl.public
     def update_token_balances(
         self, account_address: str, token_contracts: list[str]
     ) -> dict[str, int]:
         for token_contract in token_contracts:
-            contract = Contract(token_contract)
-            balance = contract.get_balance_of(account_address)
-            self.balances[account_address][token_contract] = balance
+            contract = gl.ContractAt(Address(token_contract))
+            balance = contract.view().get_balance_of(account_address).get()
+            self.balances.get_or_insert_default(Address(account_address))[
+                Address(token_contract)
+            ] = balance
 
+    @gl.public.view
     def get_balances(self) -> dict[str, dict[str, int]]:
-        return self.balances
+        return {
+            k.as_hex: {k.as_hex: v for k, v in v.items()}
+            for k, v in self.balances.items()
+        }

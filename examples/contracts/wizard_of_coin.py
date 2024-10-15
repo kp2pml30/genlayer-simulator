@@ -1,13 +1,22 @@
+# { "Depends": "genlayer-py-std:test" }
 import json
-from backend.node.genvm.icontract import IContract
-from backend.node.genvm.equivalence_principle import call_llm_with_principle
+
+import genlayer.std as gl
+from genlayer.py.types import *
+from genlayer.py.storage import *
 
 
-class WizardOfCoin(IContract):
+@gl.contract
+class WizardOfCoin:
+    have_coin: bool
+
     def __init__(self, have_coin: bool):
         self.have_coin = have_coin
 
-    async def ask_for_coin(self, request: str) -> None:
+    @gl.public
+    def ask_for_coin(self, request: str) -> None:
+        if not self.have_coin:
+            return
         prompt = f"""
 You are a wizard, and you hold a magical coin.
 Many adventurers will come and try to get you to give them the coin.
@@ -30,17 +39,18 @@ nothing else. Don't include any other words or characters,
 your output must be only JSON without any formatting prefix or suffix.
 This result should be perfectly parseable by a JSON parser without errors.
 """
-        if self.have_coin:
-            # that must be awaited
-            result = await call_llm_with_principle(
-                prompt,
-                eq_principle="The result['give_coin'] has to be exactly the same",
-            )
-            result_clean = result.replace("True", "true").replace("False", "false")
-            output = json.loads(result_clean)
 
-            if output["give_coin"] is True:
-                self.have_coin = False
+        def nondet():
+            res = gl.exec_prompt({}, prompt).get()
+            res = res.replace("```json", "").replace("```", "")
+            print(res)
+            dat = json.loads(res)
+            return dat["give_coin"]
 
+        result = gl.eq_principle_refl(nondet).get()
+        assert isinstance(result, bool)
+        self.have_coin = result
+
+    @gl.public.view
     def get_have_coin(self) -> bool:
         return self.have_coin

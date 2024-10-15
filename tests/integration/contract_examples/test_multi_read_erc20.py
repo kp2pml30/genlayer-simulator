@@ -1,5 +1,6 @@
 import json
 import os
+from backend.node.types import Address
 
 from tests.common.accounts import create_new_account
 from tests.common.request import (
@@ -78,10 +79,10 @@ def test_multi_read_erc20(setup_validators):
         [],
     )
 
-    assert call_method_response_get_balances == {
-        from_account_doge.address: {
-            doge_contract_address: TOKEN_TOTAL_SUPPLY,
-            shiba_contract_address: 0,
+    assert json.loads(call_method_response_get_balances) == {
+        Address(from_account_doge.address).as_hex: {
+            Address(doge_contract_address).as_hex: TOKEN_TOTAL_SUPPLY,
+            Address(shiba_contract_address).as_hex: 0,
         }
     }
 
@@ -103,13 +104,13 @@ def test_multi_read_erc20(setup_validators):
         [],
     )
 
-    assert call_method_response_get_balances == {
-        from_account_doge.address: {
-            doge_contract_address: TOKEN_TOTAL_SUPPLY,
-            shiba_contract_address: 0,
+    assert json.loads(call_method_response_get_balances) == {
+        Address(from_account_doge.address).as_hex: {
+            Address(doge_contract_address).as_hex: TOKEN_TOTAL_SUPPLY,
+            Address(shiba_contract_address).as_hex: 0,
         },
-        from_account_shiba.address: {
-            doge_contract_address: 0,
-            shiba_contract_address: TOKEN_TOTAL_SUPPLY,
+        Address(from_account_shiba.address).as_hex: {
+            Address(doge_contract_address).as_hex: 0,
+            Address(shiba_contract_address).as_hex: TOKEN_TOTAL_SUPPLY,
         },
     }

@@ -1,9 +1,21 @@
+# { "Depends": "genlayer-py-std:test" }
+
 import json
-from backend.node.genvm.icontract import IContract
-from backend.node.genvm.equivalence_principle import EquivalencePrinciple
+
+import typing
+import genlayer.std as gl
+from genlayer.py.types import *
+from genlayer.py.storage import *
 
 
-class PredictionMarket(IContract):
+@gl.contract
+class PredictionMarket:
+    has_resolved: bool
+    game_date: str
+    team1: str
+    team2: str
+    resolution_url: str
+
     def __init__(self, game_date: str, team1: str, team2: str):
         """
         Initializes a new instance of the prediction market with the specified game date and teams.
@@ -28,18 +40,14 @@ class PredictionMarket(IContract):
         self.team1 = team1
         self.team2 = team2
 
-    async def resolve(self) -> None:
+    @gl.public
+    def resolve(self) -> typing.Any:
 
         if self.has_resolved:
             return "Already resolved"
 
-        final_result = {}
-        async with EquivalencePrinciple(
-            result=final_result,
-            principle="The score and the winner has to be exactly the same",
-            comparative=True,
-        ) as eq:
-            web_data = await eq.get_webpage(self.resolution_url, "text")
+        def nondet() -> str:
+            web_data = gl.get_webpage({"mode": "text"}, self.resolution_url).get()
             print(web_data)
 
             task = f"""In the following web page, find the winning team in a matchup between the following teams:
@@ -61,13 +69,15 @@ class PredictionMarket(IContract):
             It is mandatory that you respond only using the JSON format above,
             nothing else. Don't include any other words or characters,
             your output must be only JSON without any formatting prefix or suffix.
-            This result should be perfectly parseable by a JSON parser without errors.
+            This result should be perfectly parsable by a JSON parser without errors.
             """
-            result = await eq.call_llm(task)
+            result = (
+                gl.exec_prompt({}, task).get().replace("```json", "").replace("```", "")
+            )
             print(result)
-            eq.set(result)
+            return json.dumps(json.loads(result), sort_keys=True)
 
-        result_json = json.loads(final_result["output"])
+        result_json = json.loads(gl.eq_principle_refl(nondet).get())
 
         if result_json["winner"] > -1:
             self.has_resolved = True

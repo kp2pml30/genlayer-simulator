@@ -8,8 +8,8 @@ import GhostBtn from '../global/GhostBtn.vue';
 import { notify } from '@kyvg/vue3-notification';
 import TextAreaInput from '@/components/global/inputs/TextAreaInput.vue';
 import FieldError from '@/components/global/fields/FieldError.vue';
-import { type ContractMethod } from '@/types';
 import * as calldata from '@/calldata';
+import type { ContractMethodBase } from '@/types';
 
 const props = defineProps<{
   leaderOnly: boolean;
@@ -23,10 +23,7 @@ const { data, isPending, isRefetching, isError } = contractSchemaQuery;
 const inputParams = ref<{ [k: string]: any }>({});
 
 const constructorInputs = computed(
-  () =>
-    (data.value?.abi as ContractMethod[] | undefined)?.find(
-      (method) => method.type === 'constructor',
-    )?.inputs,
+  () => data.value?.ctor as ContractMethodBase | undefined,
 );
 
 const emit = defineEmits(['deployed-contract']);
@@ -71,7 +68,8 @@ const handleDeployContract = async () => {
     constructorParams = Object.keys(inputParams.value).map((key) => {
       const val = inputParams.value[key];
       if (
-        constructorInputs.value?.find((x) => x.name === key)?.type === 'string'
+        constructorInputs.value?.params?.find((x) => x[0] === key)?.[1] ===
+        'string'
       ) {
         return val;
       }
@@ -84,31 +82,26 @@ const handleDeployContract = async () => {
   emit('deployed-contract');
 };
 
-const setInputParams = (inputs: { [k: string]: any }) => {
-  inputParams.value = inputs
-    .map((input: any) => ({ name: input.name, type: input.type }))
-    .reduce((prev: any, curr: any) => {
-      switch (curr.type) {
-        case 'bool':
-          prev = { ...prev, [curr.name]: 'false' };
-          break;
-        case 'string':
-          prev = { ...prev, [curr.name]: '' };
-          break;
-        case 'int':
-          prev = { ...prev, [curr.name]: '0' };
-          break;
-        case 'None':
-          prev = { ...prev, [curr.name]: 'null' };
-          break;
-        default:
-          prev = { ...prev, [curr.name]: '' };
-          break;
-      }
-      return prev;
-    }, {});
-
-  jsonParams.value = JSON.stringify(inputParams.value || {}, null, 2);
+const setInputParams = (
+  schema:
+    | { params: Array<any>; kwparams: { [key: string]: any } }
+    | null
+    | undefined,
+) => {
+  console.log(schema);
+  if (schema == null) {
+    jsonParams.value = '{}';
+    return;
+  }
+  const res: [string, string][] = [];
+  for (const arg of schema.params) {
+    res.push([arg.name, '']);
+  }
+  for (const [name] of Object.entries(schema.kwparams)) {
+    res.push([name, '']);
+  }
+  jsonParams.value = JSON.stringify(Object.fromEntries(res), null, 2);
+  console.log(jsonParams.value);
 };
 
 const toggleMode = () => {
@@ -123,7 +116,7 @@ const toggleMode = () => {
 watch(
   () => constructorInputs.value,
   (newValue) => {
-    setInputParams(newValue || []);
+    setInputParams(newValue || { params: [], kwparams: {} });
   },
 );
 
@@ -135,7 +128,10 @@ onMounted(() => {
 
 const hasConstructorInputs = computed(
   () =>
-    constructorInputs.value && Object.keys(constructorInputs.value).length > 0,
+    constructorInputs.value &&
+    constructorInputs.value.params.length +
+      Object.keys(constructorInputs.value.kwparams).length >
+      0,
 );
 </script>
 
@@ -171,13 +167,37 @@ const hasConstructorInputs = computed(
         :class="isDeploying && 'pointer-events-none opacity-60'"
       >
         <template v-if="mode === 'form'">
-          <div v-for="input in constructorInputs" :key="input.name">
+          <div v-for="input in constructorInputs?.params || []" :key="input[0]">
             <component
-              :is="inputMap.getComponent(input.type)"
-              v-model="inputParams[input.name]"
-              :name="input.name"
-              :placeholder="input.name"
-              :label="input.name"
+              :is="inputMap.getComponent(input[0])"
+              v-model="inputParams[input[0]]"
+              :name="input[0]"
+              :placeholder="input[1]"
+              :label="input[0]"
+            />
+          </div>
+          <div
+            v-for="input in Object.keys(constructorInputs?.kwparams || {})"
+            :key="input[0]"
+          >
+            <component
+              :is="
+                inputMap.getComponent(
+                  typeof constructorInputs?.kwparams?.[input] === 'string'
+                    ? constructorInputs.kwparams[input]
+                    : `${constructorInputs?.kwparams?.[input]}`,
+                )
+              "
+              v-model="inputParams[input]"
+              :name="input"
+              :placeholder="
+                inputMap.getComponent(
+                  typeof constructorInputs?.kwparams?.[input] === 'string'
+                    ? constructorInputs?.kwparams?.[input]
+                    : `${constructorInputs?.kwparams?.[input]}`,
+                )
+              "
+              :label="input"
             />
           </div>
         </template>

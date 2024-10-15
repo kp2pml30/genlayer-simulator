@@ -14,6 +14,7 @@ const { trackEvent } = useEventTracking();
 const inputMap = useInputMap();
 
 const props = defineProps<{
+  name: string;
   method: ContractMethod;
   methodType: 'read' | 'write';
   leaderOnly: boolean;
@@ -24,7 +25,7 @@ const inputs = ref<{ [k: string]: string }>({});
 const responseMessage = ref('');
 
 const missingParams = computed(() => {
-  return props.method.inputs.some(
+  return props.method.params.some(
     (input: any) =>
       typeof inputs.value[input.name] === 'string' &&
       inputs.value[input.name].trim() === '',
@@ -33,7 +34,7 @@ const missingParams = computed(() => {
 
 const getArgs = () => {
   return Object.keys(inputs.value).map((key) => {
-    if (props.method.inputs.find((v) => v.name == key)?.type === 'string') {
+    if (props.method.params.find((v) => v[0] == key)?.[1] === 'string') {
       return inputs.value[key];
     }
     return calldata.parse(inputs.value[key]);
@@ -44,13 +45,14 @@ const handleCallReadMethod = async () => {
   responseMessage.value = '';
 
   try {
-    const result = await callReadMethod(props.method.name, getArgs());
+    const result = await callReadMethod(props.name, getArgs());
 
-    responseMessage.value = JSON.stringify(result);
+    responseMessage.value =
+      typeof result === 'string' ? result : JSON.stringify(result);
 
     trackEvent('called_read_method', {
       contract_name: contract.value?.name || '',
-      method_name: props.method.name,
+      method_name: props.name,
     });
   } catch (error) {
     notify({
@@ -63,8 +65,8 @@ const handleCallReadMethod = async () => {
 
 const handleCallWriteMethod = async () => {
   await callWriteMethod({
-    method: props.method.name,
-    args: getArgs(),
+    method: props.name,
+    args: Object.values(inputs.value),
     leaderOnly: props.leaderOnly,
   });
 
@@ -77,31 +79,16 @@ const handleCallWriteMethod = async () => {
 
   trackEvent('called_write_method', {
     contract_name: contract.value?.name || '',
-    method_name: props.method.name,
+    method_name: props.name,
   });
 };
 
 const resetInputs = () => {
-  props.method.inputs.forEach((input: any) => {
-    let defaultValue;
-
-    switch (input.type) {
-      case 'uint256':
-      case 'float':
-        defaultValue = '0';
-        break;
-      case 'bool':
-        defaultValue = 'false';
-        break;
-      case 'string':
-        defaultValue = '';
-        break;
-      default:
-        defaultValue = '';
-        break;
-    }
-
-    inputs.value[input.name] = defaultValue;
+  props.method.params.forEach((input) => {
+    inputs.value[input[0]] = '';
+  });
+  Object.keys(props.method.kwparams).forEach((input) => {
+    inputs.value[input] = '';
   });
 };
 
@@ -117,10 +104,10 @@ onMounted(() => {
     <button
       class="flex grow flex-row items-center justify-between bg-slate-200 p-2 text-xs hover:bg-slate-300 dark:bg-slate-600 dark:hover:bg-slate-500"
       @click="isExpanded = !isExpanded"
-      :data-testid="`expand-method-btn-${method.name}`"
+      :data-testid="`expand-method-btn-${name}`"
     >
       <div class="truncate">
-        {{ method.name }}
+        {{ name }}
       </div>
 
       <ChevronDownIcon
@@ -132,13 +119,17 @@ onMounted(() => {
     <Collapse :when="isExpanded">
       <div class="flex flex-col items-start gap-2 p-2">
         <component
-          v-for="input in method.inputs"
-          :key="input.name"
-          :is="inputMap.getComponent(input.type)"
-          v-model="inputs[input.name]"
-          :name="String(input.name)"
-          :label="String(input.name)"
-          :placeholder="String(input.name)"
+          v-for="input in method.params"
+          :key="input[0]"
+          :is="
+            inputMap.getComponent(
+              typeof input[1] === 'string' ? input[1] : `${input[1]}`,
+            )
+          "
+          v-model="inputs[input[0]]"
+          :name="input[0]"
+          :label="input[0]"
+          :placeholder="typeof input[1] === 'string' ? input[1] : `${input[1]}`"
         />
 
         <div>
@@ -146,7 +137,7 @@ onMounted(() => {
             v-if="methodType === 'read'"
             @click="handleCallReadMethod"
             tiny
-            :data-testid="`read-method-btn-${method.name}`"
+            :data-testid="`read-method-btn-${name}`"
             :disabled="missingParams"
             v-tooltip="missingParams ? 'All parameters are required' : ''"
             >Call Contract</Btn
@@ -156,7 +147,7 @@ onMounted(() => {
             v-if="methodType === 'write'"
             @click="handleCallWriteMethod"
             tiny
-            :data-testid="`write-method-btn-${method.name}`"
+            :data-testid="`write-method-btn-${name}`"
             >Send Transaction</Btn
           >
         </div>
@@ -164,7 +155,7 @@ onMounted(() => {
         <div v-if="responseMessage" class="w-full break-all text-sm">
           <div class="mb-1 text-xs font-medium">Response:</div>
           <div
-            :data-testid="`method-response-${method.name}`"
+            :data-testid="`method-response-${name}`"
             class="w-full rounded bg-white p-1 font-mono text-xs dark:bg-slate-600"
           >
             {{ responseMessage }}

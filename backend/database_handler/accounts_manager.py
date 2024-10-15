@@ -33,7 +33,7 @@ class AccountsManager:
     def create_new_account_with_address(self, address: str):
         if not self.is_valid_address(address):
             raise ValueError(f"Invalid address: {address}")
-        account_state = CurrentState(id=address, data={})
+        account_state = CurrentState(id=address.lower(), data={})
         self.session.add(account_state)
         self.session.commit()
 
@@ -42,6 +42,7 @@ class AccountsManager:
 
     def get_account(self, account_address: str) -> CurrentState | None:
         """Private method to retrieve an account from the data base"""
+        account_address = account_address.lower()
         account = (
             self.session.query(CurrentState)
             .filter(CurrentState.id == account_address)

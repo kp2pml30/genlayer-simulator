@@ -3,23 +3,36 @@ from enum import Enum
 from typing import Iterable, Optional
 import base64
 
+import collections.abc
+
 
 class Address:
-    SIZE = 32
+    SIZE = 20
     _as_bytes: bytes
 
-    def __init__(self, val: str | bytes | memoryview):
-        if isinstance(val, memoryview):
+    def __init__(self, val: str | collections.abc.Buffer):
+        if isinstance(val, str):
+            if len(val) == 2 + Address.SIZE * 2 and val.startswith("0x"):
+                val = bytes.fromhex(val[2:])
+            elif len(val) > Address.SIZE:
+                val = base64.b64decode(val)
+        else:
             val = bytes(val)
-        if isinstance(val, str) or len(val) > Address.SIZE:
-            val = base64.b64decode(val)
-        if len(val) != Address.SIZE:
-            raise Exception("invalid address")
+        if not isinstance(val, bytes) or len(val) != Address.SIZE:
+            raise Exception(f"invalid address {val}")
         self._as_bytes = val
+
+    @property
+    def as_hex(self) -> str:
+        return "0x" + self._as_bytes.hex()
 
     @property
     def as_bytes(self) -> bytes:
         return self._as_bytes
+
+    @property
+    def as_b64(self) -> str:
+        return str(base64.b64encode(self.as_bytes), encoding="ascii")
 
     @property
     def as_int(self) -> int:
@@ -34,7 +47,7 @@ class Address:
         return self._as_bytes == r._as_bytes
 
     def __repr__(self) -> str:
-        return "addr:[" + "".join(["{:02x}".format(x) for x in self._as_bytes]) + "]"
+        return "addr#" + "".join(["{:02x}".format(x) for x in self._as_bytes])
 
 
 class Vote(Enum):
@@ -66,13 +79,14 @@ class PendingTransaction:
 
 @dataclass
 class Receipt:
+    returned: bytes | None
     class_name: str
     calldata: bytes
     gas_used: int
     mode: ExecutionMode
-    contract_state: str
+    contract_state: dict[str, dict[str, str]]
     node_config: dict
-    eq_outputs: dict
+    eq_outputs: dict[int, str]
     execution_result: ExecutionResultStatus
     error: Optional[Exception] = None
     vote: Optional[Vote] = None
@@ -82,6 +96,9 @@ class Receipt:
         return {
             "vote": self.vote.value,
             "execution_result": self.execution_result.value,
+            "returned": base64.b64encode(
+                self.returned if self.returned is not None else b""
+            ).decode("ascii"),
             "class_name": self.class_name,
             "calldata": str(base64.b64encode(self.calldata), encoding="ascii"),
             "gas_used": self.gas_used,

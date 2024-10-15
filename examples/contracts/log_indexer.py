@@ -10,7 +10,7 @@ class LogIndexer(IContract):
         self.vector_store = VectorStore()
 
     # read methods must start with get_
-    def get_closest_vector(self, text: str) -> dict:
+    def get_closest_vector(self, text: str) -> dict | None:
         result = self.vector_store.get_closest_vector(text)
         if result is None:
             return None
